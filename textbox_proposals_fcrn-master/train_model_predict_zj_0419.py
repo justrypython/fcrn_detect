@@ -176,26 +176,26 @@ def fcrn_loss_new1(y_true, y_pred):
      
     return K.mean(K.concatenate(images).reshape((mini_batch_size, 7, delta, delta)), axis = 1) 
      
-    '''   
-    final_loss_parts_new = np.array([(c_true * loss[i, j, :, :].reshape((1, delta, delta))).reshape((1, delta, delta)) for j in range(0, 6)])
-    final_loss_parts_new =final_loss_parts_new*5
-    final_loss_parts = list(final_loss_parts_new)
+    #'''   
+    #final_loss_parts_new = np.array([(c_true * loss[i, j, :, :].reshape((1, delta, delta))).reshape((1, delta, delta)) for j in range(0, 6)])
+    #final_loss_parts_new =final_loss_parts_new*5
+    #final_loss_parts = list(final_loss_parts_new)
     
-    final_loss_parts.append(final_c)
-    images.append(K.concatenate(final_loss_parts)) 
+    #final_loss_parts.append(final_c)
+    #images.append(K.concatenate(final_loss_parts)) 
     
         
-    c_discounted = T.set_subtensor(c_true[(c_true<=0.0).nonzero()], d.get_value())
+    #c_discounted = T.set_subtensor(c_true[(c_true<=0.0).nonzero()], d.get_value())
     
-    final_c = (c_discounted * loss[i,6,:,:])
+    #final_c = (c_discounted * loss[i,6,:,:])
        
-    # Element-wise multiply of the c feature map against all feature maps in the loss
-    final_loss_parts = [(c_true * loss[i, j, :, :].reshape((1, delta, delta))).reshape((1, delta, delta)) for j in range(0, 6)]
-    final_loss_parts.append(final_c)
+    ## Element-wise multiply of the c feature map against all feature maps in the loss
+    #final_loss_parts = [(c_true * loss[i, j, :, :].reshape((1, delta, delta))).reshape((1, delta, delta)) for j in range(0, 6)]
+    #final_loss_parts.append(final_c)
     
-    images.append(K.concatenate(final_loss_parts))
+    #images.append(K.concatenate(final_loss_parts))
     
-    tt = K.mean(K.concatenate(images).reshape((mini_batch_size, 7, delta, delta)), axis = 1)'''
+    #tt = K.mean(K.concatenate(images).reshape((mini_batch_size, 7, delta, delta)), axis = 1)'''
     #return K.mean(loss)
             
 

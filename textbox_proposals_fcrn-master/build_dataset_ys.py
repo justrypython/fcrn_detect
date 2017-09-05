@@ -131,18 +131,18 @@ def generate_dataset(db_location, output_location):
             print in_db['txt'][0][2]'''
             
             imageNum = len(in_db['imnames'][0])
-            print imageNum          
+            print (imageNum)          
             #imageNum = 1
             for index in np.arange(imageNum):
                 ss = str(in_db['imnames'][0][index])
-                print ss[3:len(ss)-2]
+                print (ss[3:len(ss)-2])
                 
                 '''s2 = ss[3:len(ss)-2]
                 if s2 != '182/turtles_44_14.jpg': #'8/ballet_131_35.jpg':
                    continue'''
    
                 strqq = db_location + "/" + ss[3:len(ss)-2]
-                print strqq
+                print (strqq)
             
                 #img = item[:].astype('float32')
                 #print ("image path:{}\n".format(strqq))
