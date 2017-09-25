@@ -12,6 +12,7 @@ import scipy.misc
 import math
 from scipy.misc import imresize
 from random import shuffle
+import matplotlib.pyplot as plt
 
 from keras import backend as K
 import theano.tensor as T
@@ -25,9 +26,11 @@ from theano.compile.sharedvalue import shared
 from keras.models import Sequential, Model
 from keras.datasets import mnist
 from keras.layers import Dense, ZeroPadding2D, Activation#, Dropout,, Flatten, Input, 
-from keras.layers import Convolution2D, MaxPooling2D, BatchNormalization
+from keras.layers import Conv2D, MaxPooling2D, BatchNormalization
 from keras.optimizers import SGD
 from keras.utils import np_utils
+
+debug = True
 
 img_rows = 512
 img_cols = 512
@@ -44,34 +47,34 @@ num_validation_samples = 900#5000
 d = shared(initial_discount, name = 'd')
 
 def fcrn_loss(y_true, y_pred):
-  loss = K.square(y_pred - y_true)  
-  images = []
-  
-  for i in range(0, mini_batch_size):
-    c_true = y_true[i, 6, :,:].reshape((1, delta, delta))   # The last feature map in the true vals is the 'c' matrix
-
-    c_discounted = T.set_subtensor(c_true[(c_true<=0.0).nonzero()], d.get_value())
+    loss = K.square(y_pred - y_true)  
+    images = []
     
-    final_c = (c_discounted * loss[i,6,:,:])
-       
-    # Element-wise multiply of the c feature map against all feature maps in the loss
-    final_loss_parts = [(c_true * loss[i, j, :, :].reshape((1, delta, delta))).reshape((1, delta, delta)) for j in range(0, 6)]
-    final_loss_parts.append(final_c)
+    for i in range(0, mini_batch_size):
+        c_true = y_true[i, 6, :,:].reshape((1, delta, delta))   # The last feature map in the true vals is the 'c' matrix
     
-    images.append(K.concatenate(final_loss_parts))
+        c_discounted = T.set_subtensor(c_true[(c_true<=0.0).nonzero()], d.get_value())
+        
+        final_c = (c_discounted * loss[i,6,:,:])
+           
+        # Element-wise multiply of the c feature map against all feature maps in the loss
+        final_loss_parts = [(c_true * loss[i, j, :, :].reshape((1, delta, delta))).reshape((1, delta, delta)) for j in range(0, 6)]
+        final_loss_parts.append(final_c)
+        
+        images.append(K.concatenate(final_loss_parts))
+        
+        '''   
+        final_loss_parts_new = np.array([(c_true * loss[i, j, :, :].reshape((1, delta, delta))).reshape((1, delta, delta)) for j in range(0, 6)])
+        final_loss_parts_new =final_loss_parts_new*5
+        final_loss_parts = list(final_loss_parts_new)
+        
+        final_loss_parts.append(final_c)
+        images.append(K.concatenate(final_loss_parts)) '''
     
-    '''   
-    final_loss_parts_new = np.array([(c_true * loss[i, j, :, :].reshape((1, delta, delta))).reshape((1, delta, delta)) for j in range(0, 6)])
-    final_loss_parts_new =final_loss_parts_new*5
-    final_loss_parts = list(final_loss_parts_new)
-    
-    final_loss_parts.append(final_c)
-    images.append(K.concatenate(final_loss_parts)) '''
-
-    #mm=K.eval(tt)
-    #print (mm.shape)
-    #print (K.shape(tt)) #Subtensor{::}.0
-  return K.mean(K.concatenate(images).reshape((mini_batch_size, 7, delta, delta)))#, axis = 1)
+        #mm=K.eval(tt)
+        #print (mm.shape)
+        #print (K.shape(tt)) #Subtensor{::}.0
+    return K.mean(K.concatenate(images).reshape((mini_batch_size, 7, delta, delta)))#, axis = 1)
  
 def get_boxes(u,v,w,h):
     tl = [u-w/2, v-h/2]
@@ -274,16 +277,16 @@ def fcrn_loss_new(y_true, y_pred):
                                               
  
 class DiscountCallback(keras.callbacks.Callback):
-  def on_epoch_end(self, epoch, logs={}):
-    print("Running callback: " + str(epoch))
-    d.set_value(d.get_value() + discount_step)
+    def on_epoch_end(self, epoch, logs={}):
+        print("Running callback: " + str(epoch))
+        d.set_value(d.get_value() + discount_step)
     
 def build_model():
     model = Sequential()
     
     # Layer 1
     model.add(ZeroPadding2D(padding = (2, 2), input_shape=(1, img_rows, img_cols))) #theano (channels,w,h) ,tensorflow (w,h,channels)
-    model.add(Convolution2D(64, 5, 5))
+    model.add(Conv2D(64, (5, 5)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size = (2, 2), strides = (2,2)))
@@ -291,7 +294,7 @@ def build_model():
     
     # Layer 2
     model.add(ZeroPadding2D(padding = (2, 2)))
-    model.add(Convolution2D(128, 5, 5))
+    model.add(Conv2D(128, (5, 5)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size = (2, 2), strides = (2,2)))
@@ -299,14 +302,14 @@ def build_model():
     
     # Layer 3
     model.add(ZeroPadding2D(padding = (1, 1)))
-    model.add(Convolution2D(128, 3, 3))
+    model.add(Conv2D(128, (3, 3)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     print("Layer 3: " + str(model.layers[-1].output_shape))
  
     # Layer 4
     model.add(ZeroPadding2D(padding = (1, 1)))
-    model.add(Convolution2D(128, 3, 3))
+    model.add(Conv2D(128, (3, 3)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size = (2, 2), strides = (2,2)))
@@ -314,7 +317,7 @@ def build_model():
     
     # Layer 5
     model.add(ZeroPadding2D(padding = (1, 1)))
-    model.add(Convolution2D(256, 3, 3))
+    model.add(Conv2D(256, (3, 3)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     print("Layer 5: " + str(model.layers[-1].output_shape))
@@ -322,7 +325,7 @@ def build_model():
     
     # Layer 6
     model.add(ZeroPadding2D(padding = (1, 1)))
-    model.add(Convolution2D(256, 3, 3))
+    model.add(Conv2D(256, (3, 3)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size = (2, 2), strides = (2,2)))
@@ -331,22 +334,22 @@ def build_model():
     
     # Layer 7
     model.add(ZeroPadding2D(padding = (1, 1)))
-    model.add(Convolution2D(512, 3, 3))
+    model.add(Conv2D(512, (3, 3)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     print("Layer 7: " + str(model.layers[-1].output_shape))
     
     # Layer 8
     model.add(ZeroPadding2D(padding = (1, 1)))
-    model.add(Convolution2D(512, 3, 3))
+    model.add(Conv2D(512, (3, 3)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
-    print("Layer 4: " + str(model.layers[-1].output_shape))
+    print("Layer 8: " + str(model.layers[-1].output_shape))
     
     
     # Layer 9
     model.add(ZeroPadding2D(padding = (2, 2)))
-    model.add(Convolution2D(512, 5, 5))
+    model.add(Conv2D(512, (5, 5)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     print("Layer 9: " + str(model.layers[-1].output_shape))
@@ -354,7 +357,7 @@ def build_model():
 
     # Layer 10
     model.add(ZeroPadding2D(padding = (2, 2)))
-    model.add(Convolution2D(7, 5, 5))
+    model.add(Conv2D(7, (5, 5)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size = (2, 2), strides = (2,2)))
@@ -367,14 +370,14 @@ def build_model():
     return model
         
 def batch(iterable, n = 1):
-  current_batch = []
-  #print ("batch-----------------\n")
-  for item in iterable:
-    current_batch.append(item)
-    #print ("current_batch:{}\n".format(str(current_batch)))
-    if len(current_batch) == n:
-      yield current_batch
-      current_batch = []
+    current_batch = []
+    #print ("batch-----------------\n")
+    for item in iterable:
+        current_batch.append(item)
+        #print ("current_batch:{}\n".format(str(current_batch)))
+        if len(current_batch) == n:
+            yield current_batch
+            current_batch = []  
       
 global a
 a = 0
@@ -383,33 +386,33 @@ def Fuc():
     global a
     print ("index:{}\n".format(a))
     a = a + 1
-   
+
 def exemplar_generator(db_iters, batch_size):
-  while True:
-    #print ("+++++++++++++++++\n")
-    #print ("db_iters:{}\n".format(db_iters))    
-    db_path = "../small_data"
-    dbs = map(lambda x: db_path + "/" + x, [f for f in os.listdir(db_path) if os.path.isfile(db_path + "/" + f)])
-    db_iters = map(lambda x: load_db(x), dbs)
-    
-    for chunk in batch(itertools.chain.from_iterable(db_iters), batch_size):
-      X = []
-      Y = []
-           
-      for item in chunk:
-        X.append(item[:].reshape(1, img_rows, img_cols))
-        labels = np.array(item.attrs['label']).transpose(2, 0, 1)
-        Y.append(labels.reshape(7, delta, delta))  
-        #Fuc()
-      yield (np.array(X), np.array(Y))
+    while True:
+        #print ("+++++++++++++++++\n")
+        #print ("db_iters:{}\n".format(db_iters))    
+        db_path = "../small_data"
+        dbs = map(lambda x: "../small_data" + "/" + x, [f for f in os.listdir(db_path) if os.path.isfile(db_path + "/" + f)])
+        db_iters = map(lambda x: load_db(x), dbs)
+
+        for chunk in batch(itertools.chain.from_iterable(db_iters), batch_size):
+            X = []
+            Y = []
+
+            for item in chunk:
+                X.append(item[:].reshape(1, img_rows, img_cols))
+                labels = np.array(item.attrs['label']).transpose(2, 0, 1)
+                Y.append(labels.reshape(7, delta, delta))  
+                #Fuc()
+            yield (np.array(X), np.array(Y))
       
 def load_db(db_filename):
-  try:
-    db = h5py.File(db_filename, 'r')
-    return db['data'].itervalues()
-  except:
-    print(sys.exc_info()[1])
-    return []
+    try:
+        db = h5py.File(db_filename, 'r')
+        return db['data'].values()
+    except:
+        print(sys.exc_info()[1])
+        return []
 
 def get_move_roi(tl,tr,bl,br, center0,center1):
     dx = center1[0] - center0[0]
@@ -605,33 +608,42 @@ def nms_square(boxes, threshold, method): #nms(total_boxes, 0.7, 'Union') #error
         I = I[np.where(o<=threshold)]
     pick = pick[0:counter]
     return pick
-    
-def get_squareBoxes(boxes): 
+
+def get_squareBoxes(res): 
     x = res[0,0,:,:]
     y = res[0,1,:,:]
     w = res[0,2,:,:]
     h = res[0,3,:,:]
-    c = res[0,4,:,:]
+    cos = res[0,4,:,:]
+    sin = res[0,5,:,:]
+    c = res[0,6,:,:]
     
     boxes = []
     confideres = []
     for row in range(0,16):
         for col in range(0,16):
-            if w[row][col]>0.0 and h[row][col]>0.0 and c[row][col] > 0.00001:
-                centerX = x[row][col]*32 + col*32+16
-                centerY = y[row][col]*32 + row*32+16
-                ww = 32*math.exp(w[row][col])
-                hh = 32*math.exp(h[row][col])
+            #if w[row][col]>0.0 and h[row][col]>0.0 and c[row][col] > 0.00001:
+            if c[col][row] > 0.00001:
+                centerX = x[col][row]*32 + col*32+16
+                centerY = y[col][row]*32 + row*32+16
+                ww = 32*math.exp(w[col][row])
+                hh = 32*math.exp(h[col][row])
+                cc = cos[col][row]
+                ss = sin[col][row]
                 
-                tl = (centerX-ww/2, centerY-hh/2)
-                tr = (centerX+ww/2, centerY-hh/2)
-                bl = (centerX-ww/2, centerY+hh/2)
-                br = (centerX+ww/2, centerY+hh/2)                
+                tl = (centerX-(ww/2*cc-hh/2*ss), 
+                      centerY-(ww/2*ss+hh/2*cc))
+                tr = (centerX+(ww/2*cc+hh/2*ss), 
+                      centerY+(ww/2*ss-hh/2*cc))
+                bl = (centerX-(ww/2*cc+hh/2*ss), 
+                      centerY-(ww/2*ss-hh/2*cc))
+                br = (centerX-(hh/2*ss-ww/2*cc), 
+                      centerY+(hh/2*cc+ww/2*ss))                
                 
-                print (ww,hh, c[row][col])
-                if ww>20 and hh>20:
-                    boxes.append([tl,tr,bl,br])
-                    confideres.append(c[row][col]) 
+                print (ww,hh, c[col][row])
+                #if ww>20 and hh>20:
+                boxes.append([tl,tr,bl,br])
+                confideres.append(c[col][row]) 
                           
     return (boxes,confideres)   
  
@@ -644,10 +656,16 @@ def draw_squareBoxes(img, boxes, confideres, threshold):
     for i in range(len(boxes)):
         [tl,tr,bl,br] = boxes[i][:]
         if confideres[i] > 0.0001:#0.4:
+            #plt.imshow(img)
+            #plt.show()
             s = str(round(confideres[i],2))
-            cv2.putText(img, s, (int((tl[0]+br[0])/2),int((tl[1]+br[1])/2)), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (255, 0 ,0), thickness = 1, lineType = 8) 
-            cv2.rectangle(img,(int(tl[0]),int(tl[1])),(int(br[0]),int(br[1])),(0,0,255),1)        
-    cv2.imwrite("result.bmp", img)                  
+            cv2.putText(img, s, (int((tl[0]+br[0])/2),int((tl[1]+br[1])/2)), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (255, 255 ,0), thickness = 1, lineType = 8) 
+            #cv2.rectangle(img,(int(tl[0]),int(tl[1])),(int(br[0]),int(br[1])),(255,255,255),1)        
+            cv2.line(img,(int(tl[0]),int(tl[1])),(int(tr[0]),int(tr[1])),(255,255,255),1)
+            cv2.line(img,(int(tl[0]),int(tl[1])),(int(bl[0]),int(bl[1])),(255,255,255),1)
+            cv2.line(img,(int(bl[0]),int(bl[1])),(int(br[0]),int(br[1])),(255,255,255),1)
+            cv2.line(img,(int(tr[0]),int(tr[1])),(int(br[0]),int(br[1])),(255,255,255),1)            
+    cv2.imwrite("result.bmp", img)                   
 
 def ger_realBox(res):
     x = res[0,0,:,:]
@@ -699,108 +717,120 @@ def draw_boxes(img, boxes):
         cv2.putText(img,s, (int(center[0]),int(center[1])), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (255, 0 ,0), thickness = 1, lineType = 8)  
     cv2.imwrite("result.bmp", img)
    
-    
+
 def load_exemplars(db_path):
-  dbs = map(lambda x: db_path + "/" + x, [f for f in os.listdir(db_path) if os.path.isfile(db_path + "/" + f)])
-  print ("load_exemplars ...........")
-  return exemplar_generator(map(lambda x: load_db(x), dbs), mini_batch_size)
+    dbs = map(lambda x: db_path + "/" + x, [f for f in os.listdir(db_path) if os.path.isfile(db_path + "/" + f)])
+    print ("load_exemplars ...........")
+    return exemplar_generator(map(lambda x: load_db(x), dbs), mini_batch_size)
 
 if __name__ == '__main__':
-  model_file = "bb-fcrn-model_weight_newLoss"
-  train_db_path = "../small_data" #"/path/to/dbs"
-  validate_db_path = "../small_data" #"/path/to/dbs"
-  
-  print("Loading data...")
-  
-  train = load_exemplars(train_db_path)
-  validate = load_exemplars(validate_db_path)
-  
-  print("Data loaded.")
-  print("Building model...")
-  
-  model = build_model()
-  
-  checkpoint = keras.callbacks.ModelCheckpoint(model_file + ".h5",
-                                               monitor = "acc",
-                                               verbose = 1,
-                                               save_best_only = True,
-                                               save_weights_only = True,
-                                               mode = 'auto')
-  
-  earlystopping = keras.callbacks.EarlyStopping(monitor = 'loss',
-                                                min_delta = 0,
-                                                patience = 5,
-                                                verbose = 1,
-                                                mode = 'auto')
-  
-  discount = DiscountCallback()
-  
-  csvlogger = keras.callbacks.CSVLogger(model_file + "-log.csv", append = True)
-  
-      
-  if os.path.exists(model_file + ".h5"):
-    model.load_weights(model_file + ".h5")
-    print ("load weights ok!")
+    model_file = "bb-fcrn-model_weight_newLoss"
+    train_db_path = "../small_data" #"/path/to/dbs"
+    validate_db_path = "../small_data" #"/path/to/dbs"
     
-    #read train image as test image
-    h5_Imagepath = "../small_data/JPLMC3"
-    i = 10
-
-    if os.path.exists(h5_Imagepath): 
-        dbs = h5py.File(h5_Imagepath, 'r')
-        data = dbs['data']
-
-        #print ( len(dbs) ) #1 0CZS0K
-        #print (len(data)) #1000
-        key = data.keys()
-        img = data[key[i]][:]
-        cv2.imwrite("test_src.bmp", img)
-        #print (data[key[0]].shape)
-        #print (data[key[0]].attrs['label']) #16*16*7
-        #print (type(data))
+    print("Loading data...")
     
-    image_path = "./test_src.bmp"
-    if os.path.exists(image_path):
-        img = cv2.imread(image_path)
-    else:
-        print ("Image path not found!")
+    train = load_exemplars(train_db_path)
+    train.__next__()
+    validate = load_exemplars(validate_db_path)
+    
+    print("Data loaded.")
+    print("Building model...")
+    
+    #model = build_model()
+    
+    checkpoint = keras.callbacks.ModelCheckpoint(model_file + ".h5",
+                                                 monitor = "loss",
+                                                 verbose = 1,
+                                                 save_best_only = True,
+                                                 save_weights_only = True,
+                                                 mode = 'auto')
+    
+    earlystopping = keras.callbacks.EarlyStopping(monitor = 'loss',
+                                                  min_delta = 0,
+                                                  patience = 5,
+                                                  verbose = 1,
+                                                  mode = 'auto')
+    
+    discount = DiscountCallback()
+    
+    csvlogger = keras.callbacks.CSVLogger(model_file + "-log.csv", append = True)
+    
         
-    if img == None:
-        os._exit() 
-    print (img.shape)
-    h_scale = img_rows / float(img.shape[0])
-    w_scale = img_cols / float(img.shape[1])
-          
-    img_color = imresize(img, (int(img_rows), int(img_cols)), interp = 'bicubic')
-    img = cv2.cvtColor(img_color, cv2.COLOR_RGB2GRAY)
-    img1 = np.expand_dims(img, axis=0) #扩一维
-    img1 = np.expand_dims(img1, axis=0)
-    #    
-      
-    print ("start predict!")      
-    res = model.predict(img1) #predict_on_batch(np.array(train.next()[0])) #1*7*16*16 (batch_size*7*16*16)
-    print ("predict over!")
-    print ("predict boxes num:{}\n".format(len(res)))
+    if os.path.exists(model_file + ".h5"):
+        #model.load_weights(model_file + ".h5")
+        print ("load weights ok!")
+        
+        #read train image as test image
+        h5_Imagepath = "../small_data/JPLMC3"
+        i = 10
     
-    if 1:       
-        [boxes,confideres] = ger_realBox(res)
-        print ("nms before boxes num:{}\n".format(len(boxes)))
-        result = nms(boxes,confideres,0.2)
-        print ("nms after boxes num:{}\n".format(len(result)))
-        draw_boxes(img, result)
+        if os.path.exists(h5_Imagepath): 
+            dbs = h5py.File(h5_Imagepath, 'r')
+            data = dbs['data']
+    
+            #print ( len(dbs) ) #1 0CZS0K
+            #print (len(data)) #1000
+            key = data.keys()
+            img = data[key[i]][:]
+            cv2.imwrite("test_src.bmp", img)
+            #print (data[key[0]].shape)
+            #print (data[key[0]].attrs['label']) #16*16*7
+            #print (type(data))
+        
+        image_path = "./test_src.bmp"
+        if os.path.exists(image_path):
+            img = cv2.imread(image_path)
+        else:
+            print ("Image path not found!")
+            
+        if img == None:
+            os._exit() 
+        print (img.shape)
+        h_scale = img_rows / float(img.shape[0])
+        w_scale = img_cols / float(img.shape[1])
+              
+        img_color = imresize(img, (int(img_rows), int(img_cols)), interp = 'bicubic')
+        img = cv2.cvtColor(img_color, cv2.COLOR_RGB2GRAY)
+        img1 = np.expand_dims(img, axis=0) #扩一维
+        img1 = np.expand_dims(img1, axis=0)
+        #    
+          
+        print ("start predict!")      
+        #res = model.predict(img1) #predict_on_batch(np.array(train.next()[0])) #1*7*16*16 (batch_size*7*16*16)
+        if debug:
+            x, y = train.__next__()
+            for i in range(x.shape[0]):
+                img = x[i, 0]
+                plt.imshow(img)
+                plt.show()
+                res = y[i].reshape((1, )+y[i].shape)
+                [boxes, confideres] = get_squareBoxes(res)
+                draw_squareBoxes(img, boxes, confideres, 0.4)
+                plt.imshow(img)
+                plt.show()            
+        print ("predict over!")
+        print ("predict boxes num:{}\n".format(len(res)))
+        
+        if 1:       
+            [boxes,confideres] = ger_realBox(res)
+            print ("nms before boxes num:{}\n".format(len(boxes)))
+            result = nms(boxes,confideres,0.2)
+            print ("nms after boxes num:{}\n".format(len(result)))
+            draw_boxes(img, result)
+        else:
+            [boxes, confideres] = get_squareBoxes(res)
+            draw_squareBoxes(img, boxes, confideres, 0.4)
+         
     else:
-        [boxes, confideres] = get_squareBoxes(res)
-        draw_squareBoxes(img, boxes, confideres, 0.4)
-       
-  else:
-    model.fit_generator(train,
-                      samples_per_epoch = num_samples_per_epoch,
-                      nb_epoch = nb_epoch,
-                      verbose = 1,
-                      validation_data = validate,
-                      nb_val_samples = num_validation_samples,
-                      max_q_size = 10,
-                      pickle_safe = True,
-                      callbacks = [checkpoint, earlystopping, csvlogger, discount])
-                      
-                     
+        model.fit_generator(train,
+                            samples_per_epoch = num_samples_per_epoch,
+                            nb_epoch = nb_epoch,
+                            verbose = 1,
+                            validation_data = validate,
+                            nb_val_samples = num_validation_samples,
+                            max_q_size = 10,
+                            pickle_safe = True,
+                            callbacks = [checkpoint, earlystopping, csvlogger, discount])
+                        
+                       
