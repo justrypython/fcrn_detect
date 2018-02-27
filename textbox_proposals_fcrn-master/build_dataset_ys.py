@@ -14,11 +14,14 @@ import time
 import math
 import traceback
 import scipy.io as sio
+import matplotlib.pyplot as plt
+from datetime import datetime
 
 delta = 16.0
 W = 512.0
 H = 512.0
 max_db_size = 1000
+debug = True
 
 def get_rotation(tl, tr):
     defs = (float(tr[0] - tl[0]), float(tr[1] - tl[1]))
@@ -56,6 +59,7 @@ def calc_pose(tl, tr, bl, br):
     
     # Calculate theta
     theta = get_rotation(tl, tr)
+    #print('the angle is ', theta)
 
     h1 = math.sqrt(math.pow((bl[0]-tl[0]),2) + math.pow((bl[1]-tl[1]),2))
     h2 = math.sqrt(math.pow((br[0]-tr[0]),2) + math.pow((br[1]-tr[1]),2))
@@ -71,7 +75,13 @@ def calc_pose(tl, tr, bl, br):
     
     #print ("tl,tr,bl,br,w,h:{}\n".format((tl[:],tr[:],bl[:],br[:],w,h)))
     if w>0.00001 and h>0.00001:
-        return ((x-u) / cell_W, (y-v) / cell_H, math.log(float(w) / cell_W), math.log(float(h) / cell_H), math.cos(theta), math.sin(theta), 1)
+        return ((x-u) / cell_W, 
+                (y-v) / cell_H, 
+                math.log(float(w) / cell_W), 
+                math.log(float(h) / cell_H), 
+                math.cos(theta*math.pi/180), 
+                math.sin(theta*math.pi/180), 
+                1)
     else:
         return (0, 0, 0, 0, 0, 0, 0)
         
@@ -104,7 +114,7 @@ def generate_dataset(db_location, output_location):
     if not os.path.exists(output_location):
         os.makedirs(output_location)
     
-    dbs = [f for f in os.listdir(db_location) if os.path.isfile(db_location + "/" + f)]
+    dbs = [f for f in os.listdir(db_location) if os.path.isfile(db_location + "/" + f) and '.mat' in f]
 
     random.shuffle(dbs)
 
@@ -112,6 +122,8 @@ def generate_dataset(db_location, output_location):
     images = 0
 
     out_db = create_new_db(output_location)
+    starttime = datetime.now()
+    print('start time is ', starttime)
 
     for cur_db in dbs:
     
@@ -135,22 +147,22 @@ def generate_dataset(db_location, output_location):
             #imageNum = 1
             for index in np.arange(imageNum):
                 ss = str(in_db['imnames'][0][index])
-                print (ss[3:len(ss)-2])
+                #print (ss[3:len(ss)-2])
                 
                 '''s2 = ss[3:len(ss)-2]
                 if s2 != '182/turtles_44_14.jpg': #'8/ballet_131_35.jpg':
                    continue'''
    
                 strqq = db_location + "/" + ss[3:len(ss)-2]
-                print (strqq)
+                #print (strqq)
             
                 #img = item[:].astype('float32')
                 #print ("image path:{}\n".format(strqq))
                                
                 img = cv2.imread(strqq)
-                #image_src = img.copy()
+                image_src = img.copy()
                 
-                if img!=None:
+                if img is not None:
                 
                     orig_dims = img.shape
 
@@ -158,16 +170,24 @@ def generate_dataset(db_location, output_location):
                     w_scale = W / float(img.shape[1])
                     #print (img.shape)
                     img = imresize(img, (int(H), int(W)), interp = 'bicubic')
-                    image_color = img.copy()
+                    #image_color = img.copy()
                     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
                     images +=1 
-                    print ("image num:{}\n".format(images))
+                    if images % 1000 == 0:
+                        endtime = datetime.now()
+                        print ("image num:{}".format(images))
+                        print ('cost time is ', endtime-starttime)
+                        if images:
+                            print ('average time is ', (endtime-starttime)/images)
+                            print ('\n')
+                        else:
+                            print ('\n')
 
                     # BBs and word labels are both lists where corresponding indices match
                     wordBB = in_db['wordBB'][0][index]
                 
-                    labels = np.empty((16, 16, 7), dtype = 'float64')
+                    labels = np.zeros((16, 16, 7), dtype = 'float32')
 
                     h_step = H / delta
                     w_step = W /delta
@@ -194,11 +214,14 @@ def generate_dataset(db_location, output_location):
                             flag = 1
                             if len(wordBB.shape) == 3:  
                                 wordBBNum = wordBB.shape[-1]                          
-                                for i2 in xrange(wordBB.shape[-1]):                                 
+                                for i2 in range(wordBB.shape[-1]):                                 
                                     bb = wordBB[:,:,i2]                            
                                     bb = np.c_[bb, bb[:,0]]                            
                                     
                                     (tl, tr, br, bl) = bb[0:, 0:4].T
+                                    #if debug:
+                                        #image_src1 = image_src.copy()
+                                        #cv2.rectangle(image_src1,(int(tl[0]),int(tl[1])),(int(br[0]),int(br[1])),(0,0,255),5)
                                     '''#cv2.rectangle(image_src,(int(tl[0]),int(tl[1])),(int(br[0]),int(br[1])),(0,0,255),1)
                                     cv2.line(image_src,(int(tl[0]),int(tl[1])),(int(tr[0]),int(tr[1])),(0,0,255),1)
                                     cv2.line(image_src,(int(tl[0]),int(tl[1])),(int(bl[0]),int(bl[1])),(0,0,255),1)
@@ -211,6 +234,9 @@ def generate_dataset(db_location, output_location):
                                     br = (br[0]*w_scale, br[1]*h_scale)
                                     bl = (bl[0]*w_scale, bl[1]*h_scale)
                                     
+                                    #if debug:
+                                        #image_color1 = image_color.copy()
+                                        #cv2.rectangle(image_color1,(int(tl[0]),int(tl[1])),(int(br[0]),int(br[1])),(0,0,255),5)
                                     '''
                                     s1 = '('+str(int(tl[0])) + ',' + str(int(tl[1]))+')'
                                     cv2.putText(image_color, s1, (int((tl[0]+br[0])/2),int((tl[1]+br[1])/2)), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (255, 0 ,0), thickness = 1, lineType = 8)  
@@ -226,6 +252,15 @@ def generate_dataset(db_location, output_location):
                                     if x1 >= minX and x1 <= maxX and y1 >= minY and y1 <= maxY:
                                         c = 1.0
                                         (x, y, w, h, cos, sin, flag) = calc_pose(tl, tr, bl, br) 
+                                        #if debug:
+                                            #if flag:
+                                                #from test_db import get_squareBoxes, draw_squareBoxes
+                                                #labels_test = np.zeros((16, 16, 7), dtype = 'float32')
+                                                #labels_test[i][j] = np.array([x, y, w, h, cos, sin, c])
+                                                #res = labels_test.transpose((2, 0, 1))
+                                                #res = res.reshape((1, ) + res.shape)
+                                                #[boxes, confideres] = get_squareBoxes(res)
+                                                #draw_squareBoxes(img, boxes, confideres, 0.4)
                                         if flag==0:
                                             break
                                         
@@ -270,6 +305,17 @@ def generate_dataset(db_location, output_location):
 
                     else:
                         add_res_to_db(out_db, img, labels)
+                        #if debug:
+                            #res = labels.transpose((2, 0, 1))
+                            #plt.imshow(img)
+                            #plt.show()
+                            #res = res.reshape((1, ) + res.shape)
+                            #from test_db import get_squareBoxes, draw_squareBoxes
+                            #[boxes, confideres] = get_squareBoxes(res)
+                            #draw_squareBoxes(img, boxes, confideres, 0.4)
+                            #plt.imshow(img)
+                            #plt.show()
+                        #print('one image end')
             
             print("Extracted " + str(count) + " images from " + cur_db + ".")
         

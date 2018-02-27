@@ -20,12 +20,13 @@ import theano
 #theano.config.floatX = 'float32'
 import keras.models
 import keras.callbacks
+from keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
 
 from theano.compile.sharedvalue import shared
 from keras.models import Sequential, Model
 from keras.datasets import mnist
 from keras.layers import Dense, ZeroPadding2D, Activation#, Dropout,, Flatten, Input, 
-from keras.layers import Convolution2D, MaxPooling2D, BatchNormalization
+from keras.layers import Conv2D, MaxPooling2D, BatchNormalization
 from keras.optimizers import SGD
 from keras.utils import np_utils
 
@@ -55,7 +56,9 @@ def fcrn_loss(y_true, y_pred):
     final_c = (c_discounted * loss[i,6,:,:])
        
     # Element-wise multiply of the c feature map against all feature maps in the loss
-    final_loss_parts = [(c_true * loss[i, j, :, :].reshape((1, delta, delta))).reshape((1, delta, delta)) for j in range(0, 6)]
+    final_loss_parts = [(c_true * loss[i, j, :, :].reshape((1, delta, delta))).reshape((1, delta, delta)) for j in range(0, 4)]
+    final_loss_parts.append(K.zeros((1, delta, delta)))
+    final_loss_parts.append(K.zeros((1, delta, delta)))
     final_loss_parts.append(final_c)
     
     images.append(K.concatenate(final_loss_parts))
@@ -283,7 +286,7 @@ def build_model():
     
     # Layer 1
     model.add(ZeroPadding2D(padding = (2, 2), input_shape=(1, img_rows, img_cols))) #theano (channels,w,h) ,tensorflow (w,h,channels)
-    model.add(Convolution2D(64, 5, 5))
+    model.add(Conv2D(64, (5, 5)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size = (2, 2), strides = (2,2)))
@@ -291,7 +294,7 @@ def build_model():
     
     # Layer 2
     model.add(ZeroPadding2D(padding = (2, 2)))
-    model.add(Convolution2D(128, 5, 5))
+    model.add(Conv2D(128, (5, 5)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size = (2, 2), strides = (2,2)))
@@ -299,14 +302,14 @@ def build_model():
     
     # Layer 3
     model.add(ZeroPadding2D(padding = (1, 1)))
-    model.add(Convolution2D(128, 3, 3))
+    model.add(Conv2D(128, (3, 3)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     print("Layer 3: " + str(model.layers[-1].output_shape))
  
     # Layer 4
     model.add(ZeroPadding2D(padding = (1, 1)))
-    model.add(Convolution2D(128, 3, 3))
+    model.add(Conv2D(128, (3, 3)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size = (2, 2), strides = (2,2)))
@@ -314,7 +317,7 @@ def build_model():
     
     # Layer 5
     model.add(ZeroPadding2D(padding = (1, 1)))
-    model.add(Convolution2D(256, 3, 3))
+    model.add(Conv2D(256, (3, 3)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     print("Layer 5: " + str(model.layers[-1].output_shape))
@@ -322,7 +325,7 @@ def build_model():
     
     # Layer 6
     model.add(ZeroPadding2D(padding = (1, 1)))
-    model.add(Convolution2D(256, 3, 3))
+    model.add(Conv2D(256, (3, 3)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size = (2, 2), strides = (2,2)))
@@ -331,22 +334,22 @@ def build_model():
     
     # Layer 7
     model.add(ZeroPadding2D(padding = (1, 1)))
-    model.add(Convolution2D(512, 3, 3))
+    model.add(Conv2D(512, (3, 3)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     print("Layer 7: " + str(model.layers[-1].output_shape))
     
     # Layer 8
     model.add(ZeroPadding2D(padding = (1, 1)))
-    model.add(Convolution2D(512, 3, 3))
+    model.add(Conv2D(512, (3, 3)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
-    print("Layer 4: " + str(model.layers[-1].output_shape))
+    print("Layer 8: " + str(model.layers[-1].output_shape))
     
     
     # Layer 9
     model.add(ZeroPadding2D(padding = (2, 2)))
-    model.add(Convolution2D(512, 5, 5))
+    model.add(Conv2D(512, (5, 5)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     print("Layer 9: " + str(model.layers[-1].output_shape))
@@ -354,7 +357,7 @@ def build_model():
 
     # Layer 10
     model.add(ZeroPadding2D(padding = (2, 2)))
-    model.add(Convolution2D(7, 5, 5))
+    model.add(Conv2D(7, (5, 5)))
     model.add(BatchNormalization(axis = 1))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size = (2, 2), strides = (2,2)))
@@ -362,7 +365,7 @@ def build_model():
     
     sgd = SGD(lr = 10e-4, decay = 5e-4, momentum = 0.9, nesterov = False)
     
-    model.compile(loss = fcrn_loss_new1, optimizer = sgd, metrics = ['accuracy'])
+    model.compile(loss = fcrn_loss, optimizer = sgd, metrics = ['accuracy'])
     
     return model
         
@@ -701,106 +704,121 @@ def draw_boxes(img, boxes):
    
     
 def load_exemplars(db_path):
-  dbs = map(lambda x: db_path + "/" + x, [f for f in os.listdir(db_path) if os.path.isfile(db_path + "/" + f)])
-  print ("load_exemplars ...........")
-  return exemplar_generator(map(lambda x: load_db(x), dbs), mini_batch_size)
+    dbs = map(lambda x: "../small_data" + "/" + x, [f for f in os.listdir(db_path) if os.path.isfile(db_path + "/" + f)])
+    print ("load_exemplars ...........")
+    return exemplar_generator(map(lambda x: load_db(x), dbs), mini_batch_size)
 
 if __name__ == '__main__':
-  model_file = "bb-fcrn-model_weight_newLoss"
-  train_db_path = "../small_data" #"/path/to/dbs"
-  validate_db_path = "../small_data" #"/path/to/dbs"
-  
-  print("Loading data...")
-  
-  train = load_exemplars(train_db_path)
-  validate = load_exemplars(validate_db_path)
-  
-  print("Data loaded.")
-  print("Building model...")
-  
-  model = build_model()
-  
-  checkpoint = keras.callbacks.ModelCheckpoint(model_file + ".h5",
-                                               monitor = "acc",
-                                               verbose = 1,
-                                               save_best_only = True,
-                                               save_weights_only = True,
-                                               mode = 'auto')
-  
-  earlystopping = keras.callbacks.EarlyStopping(monitor = 'loss',
-                                                min_delta = 0,
-                                                patience = 5,
-                                                verbose = 1,
-                                                mode = 'auto')
-  
-  discount = DiscountCallback()
-  
-  csvlogger = keras.callbacks.CSVLogger(model_file + "-log.csv", append = True)
-  
-      
-  if os.path.exists(model_file + ".h5"):
-    model.load_weights(model_file + ".h5")
-    print ("load weights ok!")
+    model_file = "bb-fcrn-model_weight_newLoss"
+    train_db_path = "../small_data" #"/path/to/dbs"
+    validate_db_path = "../small_data" #"/path/to/dbs"
     
-    #read train image as test image
-    h5_Imagepath = "../small_data/JPLMC3"
-    i = 10
-
-    if os.path.exists(h5_Imagepath): 
-        dbs = h5py.File(h5_Imagepath, 'r')
-        data = dbs['data']
-
-        #print ( len(dbs) ) #1 0CZS0K
-        #print (len(data)) #1000
-        key = data.keys()
-        img = data[key[i]][:]
-        cv2.imwrite("test_src.bmp", img)
-        #print (data[key[0]].shape)
-        #print (data[key[0]].attrs['label']) #16*16*7
-        #print (type(data))
+    print("Loading data...")
     
-    image_path = "./test_src.bmp"
-    if os.path.exists(image_path):
-        img = cv2.imread(image_path)
-    else:
-        print ("Image path not found!")
+    train = load_exemplars(train_db_path)
+    validate = load_exemplars(validate_db_path)
+    
+    print("Data loaded.")
+    print("Building model...")
+    
+    model = build_model()
+    
+    checkpoint = keras.callbacks.ModelCheckpoint(model_file + ".h5",
+                                                 monitor = "acc",
+                                                 verbose = 1,
+                                                 save_best_only = True,
+                                                 save_weights_only = True,
+                                                 mode = 'auto')
+    
+    earlystopping = keras.callbacks.EarlyStopping(monitor = 'loss',
+                                                  min_delta = 0,
+                                                  patience = 5,
+                                                  verbose = 1,
+                                                  mode = 'auto')
+    
+    discount = DiscountCallback()
+    
+    csvlogger = keras.callbacks.CSVLogger(model_file + "-log.csv", append = True)
+    
         
-    if img == None:
-        os._exit() 
-    print (img.shape)
-    h_scale = img_rows / float(img.shape[0])
-    w_scale = img_cols / float(img.shape[1])
-          
-    img_color = imresize(img, (int(img_rows), int(img_cols)), interp = 'bicubic')
-    img = cv2.cvtColor(img_color, cv2.COLOR_RGB2GRAY)
-    img1 = np.expand_dims(img, axis=0) #扩一维
-    img1 = np.expand_dims(img1, axis=0)
-    #    
-      
-    print ("start predict!")      
-    res = model.predict(img1) #predict_on_batch(np.array(train.next()[0])) #1*7*16*16 (batch_size*7*16*16)
-    print ("predict over!")
-    print ("predict boxes num:{}\n".format(len(res)))
+    if os.path.exists(model_file + ".h5"):
+        model.load_weights(model_file + ".h5")
+        print ("load weights ok!")
+        
+        #read train image as test image
+        h5_Imagepath = "../small_data/JPLMC3"
+        i = 10
     
-    if 1:       
-        [boxes,confideres] = ger_realBox(res)
-        print ("nms before boxes num:{}\n".format(len(boxes)))
-        result = nms(boxes,confideres,0.2)
-        print ("nms after boxes num:{}\n".format(len(result)))
-        draw_boxes(img, result)
+        if os.path.exists(h5_Imagepath): 
+            dbs = h5py.File(h5_Imagepath, 'r')
+            data = dbs['data']
+    
+            #print ( len(dbs) ) #1 0CZS0K
+            #print (len(data)) #1000
+            key = data.keys()
+            img = data[key[i]][:]
+            cv2.imwrite("test_src.bmp", img)
+            #print (data[key[0]].shape)
+            #print (data[key[0]].attrs['label']) #16*16*7
+            #print (type(data))
+        
+        image_path = "./test_src.bmp"
+        if os.path.exists(image_path):
+            img = cv2.imread(image_path)
+        else:
+            print ("Image path not found!")
+            
+        if img is None:
+            os._exit() 
+        print (img.shape)
+        h_scale = img_rows / float(img.shape[0])
+        w_scale = img_cols / float(img.shape[1])
+              
+        img_color = imresize(img, (int(img_rows), int(img_cols)), interp = 'bicubic')
+        img = cv2.cvtColor(img_color, cv2.COLOR_RGB2GRAY)
+        img1 = np.expand_dims(img, axis=0) #扩一维
+        img1 = np.expand_dims(img1, axis=0)
+        #    
+          
+        print ("start predict!")      
+        res = model.predict(img1) #predict_on_batch(np.array(train.next()[0])) #1*7*16*16 (batch_size*7*16*16)
+        print ("predict over!")
+        print ("predict boxes num:{}\n".format(len(res)))
+        
+        if 1:       
+            [boxes,confideres] = ger_realBox(res)
+            print ("nms before boxes num:{}\n".format(len(boxes)))
+            result = nms(boxes,confideres,0.2)
+            print ("nms after boxes num:{}\n".format(len(result)))
+            draw_boxes(img, result)
+        else:
+            [boxes, confideres] = get_squareBoxes(res)
+            draw_squareBoxes(img, boxes, confideres, 0.4)
+         
     else:
-        [boxes, confideres] = get_squareBoxes(res)
-        draw_squareBoxes(img, boxes, confideres, 0.4)
-       
-  else:
-    model.fit_generator(train,
-                      samples_per_epoch = num_samples_per_epoch,
-                      nb_epoch = nb_epoch,
-                      verbose = 1,
-                      validation_data = validate,
-                      nb_val_samples = num_validation_samples,
-                      max_q_size = 10,
-                      pickle_safe = True,
-                      callbacks = [checkpoint, earlystopping, csvlogger, discount])
-                      
-                     
+        model.fit_generator(train,
+                            samples_per_epoch = num_samples_per_epoch,
+                            nb_epoch = nb_epoch,
+                            verbose = 1,
+                            validation_data = validate,
+                            nb_val_samples = num_validation_samples,
+                            max_q_size = 10,
+                            pickle_safe = True,
+                            #callbacks = [checkpoint, earlystopping, csvlogger, discount])
+                            callbacks = [ModelCheckpoint(model_file + ".h5",
+                                                         monitor='val_loss',
+                                                         verbose=1,
+                                                         save_best_only=True,
+                                                         save_weights_only=True,
+                                                         mode='auto',
+                                                         period=1),
+                                         EarlyStopping(monitor='val_loss',
+                                                       min_delta=0.001,
+                                                       patience=2),
+                                         ReduceLROnPlateau(monitor='val_loss',
+                                                           factor=0.5,
+                                                           patience=0,
+                                                           epsilon=0.001,
+                                                           cooldown=0)])
+                        
+                       
