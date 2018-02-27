@@ -1,3 +1,8 @@
 data
 hdf5_data
+<<<<<<< HEAD
 small_data/
+=======
+small_data
+textbox_proposals_fcrn-master/__pycache__/
+>>>>>>> f0c9c2d5c05b8578baec6dad458cc7921adf4fd1
